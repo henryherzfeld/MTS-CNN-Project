@@ -120,10 +120,6 @@ for i, frame in enumerate(data):
 
 diff_data = diff_data[0:n_samples]
 
-for i in range(0, len(diff_data)):
-    diff_data[i]=diff_data[i]/255
-
-
 # In[8]:
 
 
@@ -144,26 +140,28 @@ from sklearn.model_selection import KFold
 
 from sklearn.metrics import confusion_matrix
 
-with tf.device('/device:GPU:1'):
-    base_model=applications.vgg16.VGG16(include_top=False, weights=None, input_tensor=None, input_shape=(115, 110, 14), pooling=None, classes=2)
-
-    x = base_model.output
-    x = GlobalAveragePooling2D()(x)    
-    predictions = Dense(2, activation= 'softmax')(x)
-    adam = Adam(lr=0.00001)
-
-    model = Model(inputs = base_model.input, outputs = predictions)
-    model.compile(optimizer=adam, loss='binary_crossentropy', metrics=['accuracy'])
-
 runs=20
-epochs=50
+epochs=20
 #train_acc_array=np.empty(epochs)
 test_acc_array=np.empty(epochs)
 
 folds=10
 
-max_test_array=np.empty((10, folds))
+max_test_array=np.empty((runs, folds))
 
+#mirrored_strategy=tf.distribute.MirroredStrategy()
+
+#with mirrored_strategy.scope():
+base_model=applications.vgg16.VGG16(include_top=False, weights=None, input_tensor=None, input_shape=(115, 110, 14), pooling=None, classes=2)
+
+x = base_model.output
+x = GlobalAveragePooling2D()(x)    
+predictions = Dense(2, activation= 'softmax')(x)
+adam = Adam(lr=0.00001)
+
+model = Model(inputs = base_model.input, outputs = predictions)
+model.compile(optimizer=adam, loss='binary_crossentropy', metrics=['accuracy'])
+ 
 for i in range(0, runs):
     print("Run ", i+1)
     count=1    
@@ -177,18 +175,16 @@ for i in range(0, runs):
         print("Fold ", count)
 
         for j in range(0, epochs):
-            print("Epoch ", j+1)       
-
+            print("Epoch ", j+1)
+            
             hist=model.fit(train_data, train_labels, epochs=1, batch_size=1, validation_data = None, verbose=1)
-
-            #train_acc_array[j]=hist.history['accuracy']
-
+            
             test_results=model.evaluate(test_data, test_labels, batch_size=1)
-
+            
             print("Test accuracy: ", test_results[1])  
 
             test_acc_array[j]=test_results[1]
-
+            
             predictions=np.empty((len(test_data), 2))
 
             predictions_output=model.predict(test_data)
@@ -203,8 +199,10 @@ for i in range(0, runs):
 
         max_test_array[i][count-1]=np.max(test_acc_array)
         count=count+1
-    
+        
         model.load_weights("weights.h5")
+
+
 
 
 # In[ ]:
