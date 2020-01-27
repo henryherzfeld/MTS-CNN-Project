@@ -61,7 +61,6 @@ def get_frame_differences(frames, method="default", thresholding=False):
 
 # In[4]:
 
-
 n_balls = len(os.listdir('Data/Balls/Balls'))
 n_strikes = len(os.listdir('Data/Strikes/Strikes'))
 n_samples = n_balls + n_strikes
@@ -94,9 +93,9 @@ diff_labels = np.empty((n_samples, 2))
 
 for i in range(0, n_samples):
     if i < n_balls:
-      temp = np.array((1, 0))      
+        temp = np.array((1, 0))      
     else:
-      temp = np.array((0, 1))      
+        temp = np.array((0, 1))      
 
     diff_labels[i] = temp
 
@@ -110,13 +109,13 @@ diff_data = np.empty((n_samples+1, 14, 115, 110))
 count = 0
 
 for i, frame in enumerate(data):
-  temp[i % 15] = frame
+    temp[i % 15] = frame
 
-  if not (i+1) % 15:
-    count += 1
+    if not (i+1) % 15:
+        count += 1
 
-    differences = get_frame_differences(temp)
-    diff_data[count] = differences
+        differences = get_frame_differences(temp)
+        diff_data[count] = differences
 
 diff_data = diff_data[0:n_samples]
 
@@ -149,9 +148,18 @@ folds=10
 
 max_test_array=np.empty((runs, folds))
 
-#mirrored_strategy=tf.distribute.MirroredStrategy()
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+  try:
+    # Currently, memory growth needs to be the same across GPUs
+    for gpu in gpus:
+      tf.config.experimental.set_memory_growth(gpu, True)
+    logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+  except RuntimeError as e:
+    # Memory growth must be set before GPUs have been initialized
+    print(e)
 
-#with mirrored_strategy.scope():
 base_model=applications.vgg16.VGG16(include_top=False, weights=None, input_tensor=None, input_shape=(115, 110, 14), pooling=None, classes=2)
 
 x = base_model.output
@@ -161,7 +169,7 @@ adam = Adam(lr=0.00001)
 
 model = Model(inputs = base_model.input, outputs = predictions)
 model.compile(optimizer=adam, loss='binary_crossentropy', metrics=['accuracy'])
- 
+
 for i in range(0, runs):
     print("Run ", i+1)
     count=1    
@@ -174,28 +182,29 @@ for i in range(0, runs):
 
         print("Fold ", count)
 
-        for j in range(0, epochs):
-            print("Epoch ", j+1)
-            
-            hist=model.fit(train_data, train_labels, epochs=1, batch_size=1, validation_data = None, verbose=1)
-            
-            test_results=model.evaluate(test_data, test_labels, batch_size=1)
-            
-            print("Test accuracy: ", test_results[1])  
+        with tf.device('/device:GPU:0'):
+            for j in range(0, epochs):
+                print("Epoch ", j+1)
+                
+                hist=model.fit(train_data, train_labels, epochs=1, batch_size=1, validation_data = None, verbose=1)
+                
+                test_results=model.evaluate(test_data, test_labels, batch_size=1)
+                
+                print("Test accuracy: ", test_results[1])  
 
-            test_acc_array[j]=test_results[1]
-            
-            predictions=np.empty((len(test_data), 2))
+                test_acc_array[j]=test_results[1]
+                
+                predictions=np.empty((len(test_data), 2))
 
-            predictions_output=model.predict(test_data)
+                predictions_output=model.predict(test_data)
 
-            for k in range (0, len(predictions_output)):
-                if predictions_output[k][0]>predictions_output[k][1]:
-                    predictions[k]=np.array((1, 0))
-                else:
-                    predictions[k]=np.array((0, 1))
+                for k in range (0, len(predictions_output)):
+                    if predictions_output[k][0]>predictions_output[k][1]:
+                        predictions[k]=np.array((1, 0))
+                    else:
+                        predictions[k]=np.array((0, 1))
 
-            print(confusion_matrix(test_labels.argmax(axis=1), predictions.argmax(axis=1)))
+                print(confusion_matrix(test_labels.argmax(axis=1), predictions.argmax(axis=1)))
 
         max_test_array[i][count-1]=np.max(test_acc_array)
         count=count+1

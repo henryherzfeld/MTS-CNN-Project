@@ -149,6 +149,18 @@ folds=10
 
 max_test_array=np.empty((runs, folds))
 
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+  try:
+    # Currently, memory growth needs to be the same across GPUs
+    for gpu in gpus:
+      tf.config.experimental.set_memory_growth(gpu, True)
+    logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+  except RuntimeError as e:
+    # Memory growth must be set before GPUs have been initialized
+    print(e)
+
 base_model=applications.resnet_v2.ResNet50V2(include_top=False, weights=None, input_tensor=None, input_shape=(115, 110, 14), pooling=None, classes=2)
 
 x = base_model.output
@@ -171,29 +183,30 @@ for i in range(0, runs):
         model.save_weights("weights.h5")
 
         print("Fold ", count)
+        
+        with tf.device('/device:GPU:3'):
+            for j in range(0, epochs):
+                print("Epoch ", j+1)
+                
+                hist=model.fit(train_data, train_labels, epochs=1, batch_size=1, validation_data = None, verbose=1)            
 
-        for j in range(0, epochs):
-            print("Epoch ", j+1)
-              
-            hist=model.fit(train_data, train_labels, epochs=1, batch_size=1, validation_data = None, verbose=1)            
+                test_results=model.evaluate(test_data, test_labels, batch_size=1)
 
-            test_results=model.evaluate(test_data, test_labels, batch_size=1)
+                print("Test accuracy: ", test_results[1])  
 
-            print("Test accuracy: ", test_results[1])  
+                test_acc_array[j]=test_results[1]
 
-            test_acc_array[j]=test_results[1]
+                predictions=np.empty((len(test_data), 2))
 
-            predictions=np.empty((len(test_data), 2))
+                predictions_output=model.predict(test_data)
 
-            predictions_output=model.predict(test_data)
+                for k in range (0, len(predictions_output)):
+                    if predictions_output[k][0]>predictions_output[k][1]:
+                        predictions[k]=np.array((1, 0))
+                    else:
+                        predictions[k]=np.array((0, 1))
 
-            for k in range (0, len(predictions_output)):
-                if predictions_output[k][0]>predictions_output[k][1]:
-                    predictions[k]=np.array((1, 0))
-                else:
-                    predictions[k]=np.array((0, 1))
-
-            print(confusion_matrix(test_labels.argmax(axis=1), predictions.argmax(axis=1)))
+                print(confusion_matrix(test_labels.argmax(axis=1), predictions.argmax(axis=1)))
 
         max_test_array[i][count-1]=np.max(test_acc_array)
         count=count+1
