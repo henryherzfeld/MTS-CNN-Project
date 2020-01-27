@@ -30,21 +30,35 @@ from tensorflow.keras.optimizers import Adam
 # In[3]:
 
 
-def get_frame_differences(frames):
-  n = len(frames)
 
-  first_frame = frames[0]
-  acc = np.empty((n-1, *first_frame.shape))
+def get_frame_differences(frames, method="default", thresholding=False):
+    acc = []
+    i = 0
+    n = len(frames)
+    
+    if method == "reverse":
+        while i < n-1:
+            acc.append(frames[i]-frames[i+1])
+            i += 1
 
-  for i, frame in enumerate(frames[1:]):
-    diff=cv2.absdiff(first_frame, frame)    
-    #if thresholding:
-      #ret, diff = cv2.threshold(diff, 127, 255, cv2.THRESH_BINARY)
-
-    acc[i] = diff
-    first_frame = frame
-
-  return acc
+    elif method == "multiframe":
+        while i < n-2:
+            acc.append(cv2.absdiff(frames[i], frames[i+2]))
+            i += 1
+        
+    else:
+        while i < n-1:
+            acc.append(frames[i+1]-frames[i])
+            i += 1
+            
+    if thresholding:
+        acc2 = []
+        for frame in acc:
+            _, thresh_im = cv2.threshold(frame, 50, 255, cv2.THRESH_BINARY)
+            acc2.append(thresh_im)
+        return acc2
+        
+    return acc
 
 
 # In[4]:
@@ -129,16 +143,16 @@ from sklearn.model_selection import KFold
 
 # In[10]:
 
+with tf.device('/device:GPU:0'):
+    base_model=applications.xception.Xception(include_top=False, weights=None, input_tensor=None, input_shape=(115, 110, 14), pooling=None, classes=2)
 
-base_model=applications.xception.Xception(include_top=False, weights=None, input_tensor=None, input_shape=(115, 110, 14), pooling=None, classes=2)
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
+    predictions = Dense(2, activation= 'softmax')(x)
+    model = Model(inputs = base_model.input, outputs = predictions)
+    adam = Adam(lr=0.00001)
 
-x = base_model.output
-x = GlobalAveragePooling2D()(x)
-predictions = Dense(2, activation= 'softmax')(x)
-model = Model(inputs = base_model.input, outputs = predictions)
-adam = Adam(lr=0.00001)
-
-model.compile(optimizer=adam, loss='binary_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=adam, loss='binary_crossentropy', metrics=['accuracy'])
 
 
 # In[11]:
@@ -146,12 +160,12 @@ model.compile(optimizer=adam, loss='binary_crossentropy', metrics=['accuracy'])
 
 from sklearn.metrics import confusion_matrix
 
-runs=10
+runs=20
 epochs=50
 #train_acc_array=np.empty(epochs)
 test_acc_array=np.empty(epochs)
 
-folds=5
+folds=10
 
 max_test_array=np.empty((10, folds))
 
@@ -215,5 +229,5 @@ for i in range(0, runs):
 
 
 best_epoch_df=pd.DataFrame(max_test_array)
-best_epoch_df.to_csv('Results/Tables/Xception-5FCV.csv')
+best_epoch_df.to_csv('Results/Tables/Xception-FD.csv')
 

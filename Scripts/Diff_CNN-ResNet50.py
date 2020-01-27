@@ -17,10 +17,11 @@ import numpy as np
 #%matplotlib inline
 import cv2
 
+import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras import applications
 from tensorflow.keras import optimizers
-from temsorflow.keras.models import Sequential,Model
+from tensorflow.keras.models import Sequential,Model
 from tensorflow.keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPool2D,GlobalAveragePooling2D
 from tensorflow.keras.callbacks import TensorBoard,ReduceLROnPlateau,ModelCheckpoint, EarlyStopping
 from tensorflow.keras.optimizers import Adam
@@ -58,7 +59,6 @@ def get_frame_differences(frames, method="default", thresholding=False):
         
     return acc
 
-
 # In[4]:
 
 
@@ -81,7 +81,7 @@ count=0
 for root, dirs, files in os.walk('Data'):       
     for i, file in enumerate(files):        
         path = os.path.join(root, file) 
-        img=cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        img=cv2.imread(path, cv2.IMREAD_GRAYSCALE)	
         data[count] = img        
         count=count+1
         print("Loaded file "+str(count)+ " of "+str(15*n_samples)+ " ")              
@@ -139,24 +139,21 @@ from sklearn.model_selection import KFold
 #train_data, val_data, train_labels, val_labels=train_test_split(train_data, train_labels, test_size=0.1, train_size=0.9)
 
 
-# In[10]:
-
-with tf.device('/device:GPU:2'):
-    base_model=applications.vgg19.VGG19(include_top=False, weights=None, input_tensor=None, input_shape=(115, 110, 14), pooling=None, classes=2)
-
-    x = base_model.output
-    x = GlobalAveragePooling2D()(x)
-    predictions = Dense(2, activation= 'softmax')(x)
-    model = Model(inputs = base_model.input, outputs = predictions)
-    adam = Adam(lr=0.00001)
-
-    model.compile(optimizer=adam, loss='categorical_crossentropy', metrics=['accuracy'])
-
-
 # In[11]:
 
 
 from sklearn.metrics import confusion_matrix
+
+with tf.device('/device:GPU:3'):
+    base_model=applications.resnet_v2.ResNet50V2(include_top=False, weights=None, input_tensor=None, input_shape=(115, 110, 14), pooling=None, classes=2)
+
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)    
+    predictions = Dense(2, activation= 'softmax')(x)
+    adam = Adam(lr=0.00001)
+
+    model = Model(inputs = base_model.input, outputs = predictions)
+    model.compile(optimizer=adam, loss='binary_crossentropy', metrics=['accuracy'])
 
 runs=20
 epochs=50
@@ -182,7 +179,7 @@ for i in range(0, runs):
         for j in range(0, epochs):
             print("Epoch ", j+1)       
 
-            hist=model.fit(train_data, train_labels, epochs=1, batch_size=1, validation_data = None)
+            hist=model.fit(train_data, train_labels, epochs=1, batch_size=1, validation_data = None, verbose=1)
 
             #train_acc_array[j]=hist.history['accuracy']
 
@@ -227,5 +224,5 @@ for i in range(0, runs):
 
 
 best_epoch_df=pd.DataFrame(max_test_array)
-best_epoch_df.to_csv('Results/Tables/VGG-19-FD.csv')
+best_epoch_df.to_csv('Results/Tables/VGG-16-FD.csv')
 
