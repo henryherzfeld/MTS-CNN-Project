@@ -168,7 +168,7 @@ base_model=applications.xception.Xception(include_top=False, weights=None, input
 x = base_model.output
 x = GlobalAveragePooling2D()(x)    
 predictions = Dense(2, activation= 'softmax')(x)
-adam = Adam(lr=0.00012)
+adam = Adam(lr=0.00001)
 
 model = Model(inputs = base_model.input, outputs = predictions)
 model.compile(optimizer=adam, loss='binary_crossentropy', metrics=['accuracy'])

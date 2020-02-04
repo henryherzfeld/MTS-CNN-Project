@@ -114,7 +114,7 @@ for i, frame in enumerate(data):
     if not (i+1) % 15:
         count += 1
 
-        differences = get_frame_differences(temp)
+        differences = get_frame_differences(temp, method='reverse')
         diff_data[count] = differences
 
 diff_data = diff_data[0:n_samples]
@@ -140,7 +140,7 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import confusion_matrix
 
 runs=20
-epochs=30
+epochs=40
 #train_acc_array=np.empty(epochs)
 test_acc_array=np.empty(epochs)
 
@@ -165,7 +165,7 @@ base_model=applications.vgg16.VGG16(include_top=False, weights=None, input_tenso
 x = base_model.output
 x = GlobalAveragePooling2D()(x)    
 predictions = Dense(2, activation= 'softmax')(x)
-adam = Adam(lr=0.00012)
+adam = Adam(lr=0.00001)
 
 model = Model(inputs = base_model.input, outputs = predictions)
 model.compile(optimizer=adam, loss='binary_crossentropy', metrics=['accuracy'])
@@ -231,5 +231,5 @@ for i in range(0, runs):
 
 
 best_epoch_df=pd.DataFrame(max_test_array)
-best_epoch_df.to_csv('Results/Tables/VGG-16-FD.csv')
+best_epoch_df.to_csv('Results/Tables/VGG-16-RFD.csv')
 

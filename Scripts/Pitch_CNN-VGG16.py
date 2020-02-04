@@ -59,9 +59,7 @@ def get_frame_differences(frames, method="default", thresholding=False):
         
     return acc
 
-
 # In[4]:
-
 
 n_balls = len(os.listdir('Data/Balls/Balls'))
 n_strikes = len(os.listdir('Data/Strikes/Strikes'))
@@ -82,7 +80,7 @@ count=0
 for root, dirs, files in os.walk('Data'):       
     for i, file in enumerate(files):        
         path = os.path.join(root, file) 
-        img=cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        img=cv2.imread(path, cv2.IMREAD_GRAYSCALE)	
         data[count] = img        
         count=count+1
         print("Loaded file "+str(count)+ " of "+str(15*n_samples)+ " ")              
@@ -90,41 +88,50 @@ for root, dirs, files in os.walk('Data'):
 
 # In[6]:
 
-
-diff_labels = np.empty((n_samples, 2))
+pitch_labels=np.empty((n_samples, 2))
+#diff_labels = np.empty((n_samples, 2))
 
 for i in range(0, n_samples):
     if i < n_balls:
-      temp = np.array((1, 0))      
+        temp = np.array((1, 0))      
     else:
-      temp = np.array((0, 1))      
+        temp = np.array((0, 1))      
 
-    diff_labels[i] = temp
+    pitch_labels[i]=temp
+    #diff_labels[i] = temp
 
 
 # In[7]:
 
 
 temp = np.empty((15, 115, 110))
-diff_data = np.empty((n_samples+1, 14, 115, 110))
+pitch_data=np.empty((n_samples, 15, 115, 110))
+# diff_data = np.empty((n_samples+1, 14, 115, 110))
 
 count = 0
 
 for i, frame in enumerate(data):
-  temp[i % 15] = frame
+    temp[i % 15] = frame
+    
+    if not i+1 % 15:
+        count +=1
+        pitch_data[count]=temp
 
-  if not (i+1) % 15:
-    count += 1
+""" for i, frame in enumerate(data):
+    temp[i % 15] = frame
 
-    differences = get_frame_differences(temp, method='reverse')
-    diff_data[count] = differences
+    if not (i+1) % 15:
+        count += 1
 
-diff_data = diff_data[0:n_samples]
+        differences = get_frame_differences(temp)
+        diff_data[count] = differences
+
+diff_data = diff_data[0:n_samples] """
 
 # In[8]:
 
 
-diff_data = np.moveaxis(diff_data, 1, 3)
+pitch_data = np.moveaxis(pitch_data, 1, 3)
 
 
 # In[9]:
@@ -136,12 +143,13 @@ from sklearn.model_selection import KFold
 #train_data, val_data, train_labels, val_labels=train_test_split(train_data, train_labels, test_size=0.1, train_size=0.9)
 
 
-# In[10]:
+# In[11]:
+
 
 from sklearn.metrics import confusion_matrix
 
 runs=20
-epochs=40
+epochs=50
 #train_acc_array=np.empty(epochs)
 test_acc_array=np.empty(epochs)
 
@@ -161,40 +169,43 @@ if gpus:
     # Memory growth must be set before GPUs have been initialized
     print(e)
 
-base_model=applications.vgg19.VGG19(include_top=False, weights=None, input_tensor=None, input_shape=(115, 110, 14), pooling=None, classes=2)
+base_model=applications.vgg16.VGG16(include_top=False, weights=None, input_tensor=None, input_shape=(115, 110, 15), pooling=None, classes=2)
 
 x = base_model.output
 x = GlobalAveragePooling2D()(x)    
 predictions = Dense(2, activation= 'softmax')(x)
-adam = Adam(lr=0.00001)
+adam = Adam(lr=0.1)
 
 model = Model(inputs = base_model.input, outputs = predictions)
 model.compile(optimizer=adam, loss='binary_crossentropy', metrics=['accuracy'])
 
-  
 for i in range(0, runs):
     print("Run ", i+1)
     count=1    
 
-    for train_index, test_index in KFold(folds, shuffle=True).split(diff_data):
-        train_data, test_data=diff_data[train_index], diff_data[test_index]
-        train_labels, test_labels=diff_labels[train_index], diff_labels[test_index]
+    for train_index, test_index in KFold(folds, shuffle=True).split(pitch_data):
+        #train_data, test_data=diff_data[train_index], diff_data[test_index]
+        #train_labels, test_labels=diff_labels[train_index], diff_labels[test_index]
+
+        train_data, test_data=pitch_data[train_index], pitch_data[test_index]
+        train_labels, test_labels=pitch_labels[train_index], pitch_labels[test_index]
 
         model.save_weights("weights.h5")
 
         print("Fold ", count)
+
         
         for j in range(0, epochs):
             print("Epoch ", j+1)
+                        
+            hist=model.fit(train_data, train_labels, epochs=1, batch_size=12, validation_data = None, verbose=1)
             
-            hist=model.fit(train_data, train_labels, epochs=1, batch_size=12, validation_data = None, verbose=1)            
-
             test_results=model.evaluate(test_data, test_labels, batch_size=12)
-
+            
             print("Test accuracy: ", test_results[1])  
 
             test_acc_array[j]=test_results[1]
-
+            
             predictions=np.empty((len(test_data), 2))
 
             predictions_output=model.predict(test_data)
@@ -209,12 +220,8 @@ for i in range(0, runs):
 
         max_test_array[i][count-1]=np.max(test_acc_array)
         count=count+1
-    
+        
         model.load_weights("weights.h5")
-
-
-# In[11]:
-
 
 
 
@@ -234,6 +241,7 @@ for i in range(0, runs):
 
 # In[ ]:
 
+
 best_epoch_df=pd.DataFrame(max_test_array)
-best_epoch_df.to_csv('Results/Tables/VGG-19-RFD.csv')
+best_epoch_df.to_csv('Results/Tables/VGG-16-Raw Data.csv')
 
